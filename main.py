@@ -24,6 +24,7 @@ def rainbow_cycle(pds, pause=.05, steps=1000, separation=10):
     for step in range(steps):
         ratio = 0
         for idx, fixture in enumerate(pds):
+            print  (ratios[(step + idx*separation) % steps], 1.0, 1.0)
             fixture.hsv = (ratios[(step + idx*separation) % steps], 1.0, 1.0)
         print pds
         pds.go()

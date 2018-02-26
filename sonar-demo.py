@@ -4,6 +4,7 @@
 
 """
 import sys
+import traceback
 import signal
 import os
 import jack
@@ -33,8 +34,9 @@ defaultclientname = os.path.splitext(os.path.basename(next(argv)))[0]
 clientname = next(argv, defaultclientname)
 servername = next(argv, None)
 bufferQ = collections.deque()
-frameDelay = 8
+frameDelay = 6
 RATE = 44100
+runningMaxAmplitude = 0
 
 client = jack.Client(clientname, servername=servername)
 if client.status.server_started:
@@ -45,6 +47,7 @@ if client.status.name_not_unique:
 event = threading.Event()
 
 def computeFFT():
+    global runningMaxAmplitude
     while True:
         # wait until there is enough data in the buffer to be processed
         if len(bufferQ) < 5:
@@ -52,62 +55,67 @@ def computeFFT():
             continue
         try:
             # iterate over each of the speaker iinputs
-            for inp in client.inports:
-                data = []
-                # read the last four values from the buffer and add them to a list
-                for i in [-5,-3,-1]:
+            data = []
+            # read the last four values from the buffer and add them to a list
+            for i in [0]:
+                print len(bufferQ[i])
+                # pass control to any other running threads
+                time.sleep(0)
+                for j in range(0, len(bufferQ[i]), 4):
                     # pass control to any other running threads
                     time.sleep(0)
-                    for j in range(0, len(bufferQ[i]), 4):
-                        # pass control to any other running threads
-                        time.sleep(0)
-                        data.extend(struct.unpack('f', bufferQ[i][j:j+4]))
-
-                # do fft
-                fftdata = np.abs(np.fft.rfft(data))
-                # get list of frequencies in the range supported by the sample rate
-                bins = np.linspace(0, RATE/2, len(fftdata))
-                # prune out values above 2000Hz (they won't be in any decent music anyway)
-                # prune out fft values less than some threshold, they're just noise anyway
-                for i in range(len(bins)):
-                    time.sleep(0)
-                    if bins[i] > 2000:
-                        bins = bins[:i]
-                        max_value = max(fftdata[:i])
-                        for i in range(len(fftdata)):
-                            if (fftdata[i] < (.2*max_value)):
-                                fftdata[i] = 0
-                        break
-                #  average over intervals of 200 bins
-                num_means = np.linspace(0, bins[-1], 200)
-                digitized = np.digitize(bins, num_means).tolist()
-                bin_means = []
-                groups = enumerate(digitized)
-                groups = itertools.groupby(groups, key=lambda x: x[1])
-                for _, g in groups:
-                    time.sleep(0)
-                    g = list(g)
-                    # print g
-                    bin_means.append(np.mean([fftdata[k] for k,_ in g]))
-                # discretize the signal by taking the max of the averages over 9 bins
-                num_maxs = np.linspace(0, bins[-1], 9)
-                digitized = np.digitize(num_means, num_maxs).tolist()
-                bin_maxs = [0]*len(num_maxs)
-                for i in range(len(num_means)):
-                    time.sleep(0)
-                    maxs = max(bin_means[i], bin_maxs[digitized[i]-1])
-                    bin_maxs[digitized[i]-1] = maxs
-
-                # display visualization of discretized signals
-                pl.clf()
-                pl.xlim(-200, num_means[-1])
-                pl.ylim(0, 100)
+                    data.extend(struct.unpack('f', bufferQ[i][j:j+4]))
+            # do fft
+            fftdata = np.abs(np.fft.rfft(data))
+            # get list of frequencies in the range supported by the sample rate
+            bins = np.linspace(0, RATE/2, len(fftdata))
+            # prune out values above 2000Hz (they won't be in any decent music anyway)
+            # prune out fft values less than some threshold, they're just noise anyway
+            for i in range(len(bins)):
                 time.sleep(0)
-                pl.bar(num_maxs, bin_maxs, width=20)
-                pl.grid(True)
-                pl.draw()
+                if bins[i] > 1500:
+                    bins = bins[:i]
+                    max_value = max(fftdata[:i])
+                    runningMaxAmplitude = max_value if max_value > runningMaxAmplitude else .5*(max_value+runningMaxAmplitude)
+                    for i in range(len(fftdata)):
+                        if (fftdata[i] < (.2*max_value)):
+                            fftdata[i] = 0
+                        else:
+                            fftdata[i] /= runningMaxAmplitude
+                    break
+            #  average over intervals of 200 bins
+            num_means = np.geomspace(1, bins[-1], 500)
+            digitized = np.digitize(bins, num_means).tolist()
+            bin_means = np.zeros(len(num_means))
+            groups = enumerate(digitized)
+            groups = itertools.groupby(groups, key=lambda x: x[1])
+            for i, g in groups:
+                time.sleep(0)
+                g = list(g)
+                # print g
+                bin_means[i-1] = np.mean([fftdata[k] for k,_ in g])
+            # discretize the signal by taking the max of the averages over 9 bins
+            num_maxs = np.linspace(0, bins[-1], 9)
+            digitized = np.digitize(num_means, num_maxs).tolist()
+            bin_maxs = [0]*len(num_maxs)
+            for i in range(len(bin_means)):
+                time.sleep(0)
+                maxs = max(bin_means[i], bin_maxs[digitized[i]-1])
+                bin_maxs[digitized[i]-1] = maxs
+
+            # display visualization of discretized signals
+            pl.clf()
+            # pl.xlim(-200, num_means[-1])
+            pl.xlim(0,2000)
+            pl.ylim(0, 1)
+            time.sleep(0)
+            pl.bar(num_maxs, bin_maxs, width=10)
+            pl.grid(True)
+            pl.draw()
         except Exception, e:
             print 'error', str(e)
+            _, _, traceback_ = sys.exc_info()
+            print traceback.format_tb(traceback_)
             pass
 
 @client.set_process_callback
