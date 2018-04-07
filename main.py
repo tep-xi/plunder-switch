@@ -3,7 +3,7 @@ import random
 import time
 
 # caution to those with epilepsy
-def epilepsy(pds, pause=.1, iterations=5, steps=100):
+def epilepsy(pds, pause=.1, iterations=5, steps=50):
     # divide up the space of color between the lights
     div = steps / len(pds)
     # create an array of hue values by the step size
@@ -21,11 +21,11 @@ def epilepsy(pds, pause=.1, iterations=5, steps=100):
 def rainbow_cycle(pds, pause=.05, steps=1000, separation=10):
     div = steps / len(pds)
     ratios = map(lambda x: float(x)/steps, list(xrange(steps)))
-    for step in range(steps):
+    for step in range(steps, -1, -1):
         ratio = 0
         for idx, fixture in enumerate(pds):
-            print  (ratios[(step + idx*separation) % steps], 1.0, 1.0)
-            fixture.hsv = (ratios[(step + idx*separation) % steps], 1.0, 1.0)
+            print  (ratios[(step + idx*separation) % steps], .8, .9)
+            fixture.hsv = (ratios[(step + idx*separation) % steps], .8, .9)
         print pds
         pds.go()
         time.sleep(pause)
@@ -46,20 +46,15 @@ def fade_in(pds1):
 
 if __name__ == '__main__':
     # Our ethernet attached power supply.
-    pds = kinet.PowerSupply("18.102.224.64")
+    pds = kinet.PowerSupply("18.102.224.41")
 
     # Our light fixtures
-    fix1 = kinet.FixtureRGB(0)
-    fix2 = kinet.FixtureRGB(3)
-    fix3 = kinet.FixtureRGB(6)
-
-    # Attach our fixtures to the power supply
-    pds.append(fix1)
-    pds.append(fix2)
-    # pds.append(fix3)
+    for i in range(0, 19, 3):
+        # Attach our fixtures to the power supply
+        pds.append(kinet.FixtureRGB(i))
 
     while True:
         fade_in(pds)
         epilepsy(pds, pause=.1, iterations=1)
         while True:
-            rainbow_cycle(pds, steps=500)
+            rainbow_cycle(pds, pause=.2, steps=10000)

@@ -35,16 +35,16 @@ argv = iter(sys.argv)
 defaultclientname = os.path.splitext(os.path.basename(next(argv)))[0]
 clientname = next(argv, defaultclientname)
 servername = next(argv, None)
-frameDelay = 256
+frameDelay = 512
 bufferQ = collections.deque(maxlen=frameDelay) # buffer of sound to delay music output
 RATE = 48000
 FRAMES = 2048
+WINDOW_S = 256
+HOP_S = 128
 bpmQ = collections.deque(maxlen=4) # keeps track on the most likely bpm from the last few detections
 beat_constant = 1
 analyzation_time = 1
-beat_delay = .001
-#new idea, try a beat window and activate anything that is within the sliding window
-
+beat_delay = .12
 
 client = jack.Client(clientname, servername=servername)
 if client.status.server_started:
@@ -64,41 +64,26 @@ pds.append(fix2)
 event = threading.Event()
 
 def activateLights():
+    counter = 0.0
     while True:
         cur_time = time.time()
-        delay_multiplier = (cur_time-analyzation_time) / beat_constant
-        delay_multiplier = np.floor(delay_multiplier)
-        delay =  beat_constant/8 - beat_delay
+        delay =  beat_constant*2 - beat_delay
         print delay
         if delay < 0:
             continue
         else:
             time.sleep(delay)
-
+        # counter = (counter + 1) % 16
+        counter = 7
         # display visualization of discretized signals
         shouldUpdate = False
         for idx, fixture in enumerate(pds):
-            # shouldUpdate = shouldUpdate or (
-            #     not fixture.rgb[0] == int(0xff * output[idx*3]) or
-            #     not fixture.rgb[1] == int(0xff * output[idx*3+1]) or
-            #     not fixture.rgb[2] == int(0xff * output[idx*3+2])
-            # )
-            # fixture.rgb = (output[idx*3],output[idx*3+1],output[idx*3+2])
-            shouldUpdate = shouldUpdate or (
-                not fixture.rgb[1] == int(0xff)
-            )
-            fixture.rgb = (1,.3,.3)
-            # shouldUpdate = shouldUpdate or (
-            #     not fixture.rgb[0] == int(0xff * max(output[idx*3],output[idx*3+1],output[idx*3+2]))
-            # )
-            # fixture.rgb = (max(output[idx*3],output[idx*3+1], output[idx*3+2]), .5, .5)
-        if shouldUpdate:
-            print 'updated'
-            pds.go()
+            fixture.rgb = (.6,counter/16 + 1,((counter*2) % 16 +1)/16)
+        pds.go()
 
-        time.sleep(.1)
+        time.sleep(.05)
         for idx, fixture in enumerate(pds):
-            fixture.rgb = (.5,0,0)
+            fixture.rgb = (.5,counter/16 +1,((counter*2) % 16 +1)/16)
         pds.go()
 
 def computeFFT():
@@ -111,16 +96,18 @@ def computeFFT():
             time.sleep(1.5)
             continue
         try:
+            analyzation_time = time.time() # seconds
             # List of beats, in samples
             beats = []
             # Total number of frames read
-            o = tempo("mkl", 256, 128, RATE)
+            o = tempo("mkl", WINDOW_S, HOP_S, RATE)
 
             data = []
             # pass control to any other running threads
             time.sleep(0)
             # iterate over values from the buffer
-            for i in range(0, frameDelay, 1):
+            # the two audio channels differ slightly, so this only works if we look at one
+            for i in range(0, frameDelay, 2):
                 # time.sleep(0)
                 rawData = bufferQ[i]
                 for j in range(0, len(rawData), 4):
@@ -131,10 +118,10 @@ def computeFFT():
 
             beats = []
             is_beats = []
-            for i in range(0, len(data), 128):
+            for i in range(0, len(data), HOP_S):
                 # pass control to any other running threads
                 time.sleep(0)
-                is_beat= o(np.float32(data[i:i+128]))
+                is_beat= o(np.float32(data[i:i+HOP_S]))
                 if is_beat:
                     this_beat = o.get_last_s()
                     beats.append(this_beat)
@@ -146,16 +133,11 @@ def computeFFT():
                 if len(beats) < 4:
                     print("few beats found")
                 bpms = 60./np.diff(beats)
-                median_bpm = np.median(bpms)
-                is_onset = np.int32(bpms) == np.int32(median_bpm)
-                analyzation_time = time.time() # seconds
-                onset_times = []
-                for _,ons in enumerate(beats):
-                    onset_times.append(ons)
-                print 'the answer', median_bpm
-                beat_equation = np.polyfit(range(len(onset_times)), onset_times, 1)
-                beat_constant = np.polyval(beat_equation, 1)
-            time.sleep(5)
+                median_bpm = np.round(np.median(bpms))-4 # minus because it's a bit more accurate
+                print 'current bpm', median_bpm
+                beat_diff = 60./median_bpm
+                beat_constant = beat_diff
+            time.sleep(4)
         except Exception, e:
             time.sleep(0)
             print 'error', str(e)
@@ -167,12 +149,14 @@ def computeFFT():
 def process(frames):
     assert len(client.inports) == len(client.outports)
     assert frames == client.blocksize
+    channel = 0
     for inp, outp in zip(client.inports, client.outports):
         bufferQ.append(bytes(inp.get_buffer()))
         if(len(bufferQ) >= frameDelay):
-            outp.get_buffer()[:] = bufferQ[4]
+            outp.get_buffer()[:] = bufferQ[channel]
         else:
             outp.get_buffer()[:] = bufferQ[-1]
+        channel += 1
 
 @client.set_shutdown_callback
 def shutdown(status, reason):
