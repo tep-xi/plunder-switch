@@ -7,7 +7,7 @@ import sys
 # caution to those allergic to normies
 def normalize(pds, pause=.1, iterations=5, steps=50):
     for idx, fixture in enumerate(pds):
-        fixture.hsv = (0, 0, .1)
+        fixture.hsv = (0, 0, .01)
     pds.go()
 
 
