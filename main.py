@@ -41,7 +41,7 @@ def epilepsy(pds, pause=.1, iterations=5, steps=50):
 # caution to those allergic to normies
 def normalize(pds, pause=.1, iterations=5, steps=50):
     for idx, fixture in enumerate(pds):
-        fixture.hsv = (0, 0, .6)
+        fixture.hsv = (0, 0, 0)
     pds.go()
 
 def rainbow_cycle(pds, pause=.05, steps=1000, separation=10):
@@ -94,5 +94,5 @@ while True:
     else:
         if previous_mode:
             ship.publish("plunder/cmnd/power", "1")
+            normalize(pds, pause=.2, steps=10000)
         previous_mode = 0
-	normalize(pds, pause=.2, steps=10000)
