@@ -69,8 +69,10 @@ def fade_in(pds1):
     pds.go()
 
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(15, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-GPIO.add_event_detect(15, GPIO.RISING, callback=dosomething)
+//3 should have a physical pull up resistor on it
+GPIO.setup(3, GPIO.OUT)
+GPIO.setup(12, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.add_event_detect(12, GPIO.BOTH, callback=dosomething)
 
 ship = mqtt.Client()
 print("PLUNDER BEFORE PILLAGE, MISSION FUFILLAGE! \nLAND HO!")
